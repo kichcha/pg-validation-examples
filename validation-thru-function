@@ -1,0 +1,91 @@
+create or replace function append_error(in_error_var varchar, in_error_message varchar) returns varchar as $$
+begin
+	if (in_error_var = '')
+	then
+		return in_error_message;
+	else
+		return in_error_var || '; ' || in_error_message;
+	end if;
+end;
+$$ language plpgsql;
+
+create or replace function validate_row(in_date1 varchar, in_date2 varchar, in_code varchar) 
+returns record as $$
+--  function append_error(in_error_var varchar, in_error_message varchar) return varchar;
+declare
+  error_message varchar = '';
+  date1 date;
+  date2 date;
+  code int;
+  ret_rec record;
+ 
+begin
+-- date1 checks
+  begin
+	  if (in_date1 is null or in_date1 = '')
+	  then
+	  	error_message = append_error(error_message, 'invalid date1 - cannot be null');
+	  else
+--		  if (position('/' in in_date1))
+--		  then
+--		  	date1 = to_date(in_date1, 'YYYY/MM/DD');
+--		  elsif (position('-' in in_date1))
+--		  then
+--		  	date1 = to_date(in_date1, 'YYYY-MM-DD');
+--		  end if;
+	      date1 = in_date1::date;
+		  if (date1 < to_date('1850-01-01', 'YYYY-MM-DD'))
+		  then
+		  	error_message = append_error(error_message, 'Invalid date1 - value less than 1850-01-01');
+		  elsif (date1 > now())
+		  then
+		  	error_message = append_error(error_message, 'Invalid date1 - future date');
+		  end if;
+	  end if;
+  exception when others then
+	  error_message = append_error(error_message, 'invalid date1 value');
+  end;
+ -- date2 checks
+  begin
+	  if (in_date2 is not null and in_date2 <> '')
+	  then
+--	  	if (position('/' in in_date2) > 0)
+--	  	then 
+--	  		date2 = to_date(in_date2, 'YYYY/MM/DD');
+--	  	elsif (position('-' in in_date2) > 0)
+--	  	then 
+--	  		date2 = to_date(in_date2, 'YYYY-MM-DD');
+--	  	else 
+--	  		error_message = append_error(error_message, 'invalid date2');
+--		end if;
+	    date2 = in_date2::date;
+    	if (date2 < date1)
+    	then
+    		error_message = append_error(error_message, 'date2 is earlier than date1');
+    	elsif (date2 > now())
+    	then
+    		error_message = append_error(error_message, 'date2 cannot be a future date');
+    	end if;
+  	 end if;
+  exception when others then
+    error_message = append_error(error_message, 'unknow error validating date2');
+  end;
+ -- code
+  begin
+	  if (in_code is null or in_code = '')
+	  then
+	  	error_message = append_error(error_message, 'invalid code - cannot be empty');
+	  else
+	  	code = in_code::int;
+	  	if (code > 2000)
+	  	then
+	  	  error_message = append_error(error_message, 'invalid code - value greater than 2000');
+	  	end if;
+	  end if;
+  exception when others then
+    error_message = append_error(error_message, 'code is not a valid number');
+  end;
+  select date1, date2, code, error_message into ret_rec;
+  return ret_rec;
+end;
+$$ language plpgsql;
